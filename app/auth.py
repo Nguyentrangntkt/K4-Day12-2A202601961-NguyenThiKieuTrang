@@ -14,7 +14,7 @@ bằng ngôn ngữ nào cũng có sẵn thư viện hiểu nó.
 from __future__ import annotations
 
 import secrets
-
+import hashlib
 from fastapi import Header, HTTPException, status
 
 from .config import get_settings
@@ -73,7 +73,13 @@ def verify_bearer_token(
         )
 
     expected_token = get_settings().api_token
-
+    print(
+    "AUTH DEBUG:",
+    "received_len=", len(token),
+    "expected_len=", len(expected_token),
+    "received_hash=", hashlib.sha256(token.encode()).hexdigest()[:8],
+    "expected_hash=", hashlib.sha256(expected_token.encode()).hexdigest()[:8],
+    )
     if not secrets.compare_digest(token, expected_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
