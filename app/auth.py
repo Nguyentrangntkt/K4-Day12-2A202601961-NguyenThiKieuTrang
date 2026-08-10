@@ -27,36 +27,17 @@ def verify_bearer_token(
     authorization: str | None = Header(default=None),
     x_client_id: str | None = Header(default=None),
 ) -> str:
-    """Kiểm tra header ``Authorization``; trả về client_id nếu hợp lệ.
 
-    TODO (CP3):
-      1. Thiếu header ``authorization`` → 401.
-      2. Tách header thành 2 phần: ``scheme, _, token = authorization.partition(" ")``.
-         Sai scheme (không phải ``Bearer``, so sánh không phân biệt hoa thường)
-         hoặc token rỗng → 401.
-      3. So sánh ``token`` với ``get_settings().api_token`` bằng
-         ``secrets.compare_digest(a, b)`` — **không dùng** ``==``.
-         Toán tử ``==`` dừng ngay tại ký tự đầu khác nhau, nên thời gian trả
-         lời rò rỉ thông tin về token (timing attack). ``compare_digest``
-         luôn chạy hết chuỗi.
-      4. Mọi trường hợp 401 dùng chung::
+    print(
+        "AUTH ENTRY:",
+        "present=", authorization is not None,
+        "length=", len(authorization or ""),
+        "starts_bearer=", (authorization or "").lower().startswith("bearer "),
+        flush=True,
+    )
 
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="invalid or missing bearer token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-         Header ``WWW-Authenticate`` là bắt buộc theo chuẩn HTTP cho response
-         401 — nó nói cho client biết phải xác thực kiểu gì.
-
-         Dùng **cùng một** thông báo cho mọi trường hợp: nói rõ "sai scheme"
-         hay "token không đúng" là tặng thông tin cho người đang dò.
-      5. Hợp lệ → trả về ``x_client_id`` nếu client có gửi, ngược lại trả
-         ``ANONYMOUS_CLIENT``. client_id này là đơn vị để rate limit và tính
-         chi phí.
-    """
     if not authorization:
+        print("AUTH FAIL: missing authorization", flush=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or missing bearer token",
@@ -65,7 +46,15 @@ def verify_bearer_token(
 
     scheme, _, token = authorization.partition(" ")
 
+    print(
+        "AUTH PARSED:",
+        "scheme=", scheme,
+        "token_len=", len(token),
+        flush=True,
+    )
+
     if scheme.lower() != "bearer" or not token:
+        print("AUTH FAIL: bad scheme or empty token", flush=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or missing bearer token",
@@ -73,18 +62,24 @@ def verify_bearer_token(
         )
 
     expected_token = get_settings().api_token
+
     print(
-    "AUTH DEBUG:",
-    "received_len=", len(token),
-    "expected_len=", len(expected_token),
-    "received_hash=", hashlib.sha256(token.encode()).hexdigest()[:8],
-    "expected_hash=", hashlib.sha256(expected_token.encode()).hexdigest()[:8],
+        "AUTH COMPARE:",
+        "received_len=", len(token),
+        "expected_len=", len(expected_token),
+        "received_hash=", hashlib.sha256(token.encode()).hexdigest()[:8],
+        "expected_hash=", hashlib.sha256(expected_token.encode()).hexdigest()[:8],
+        flush=True,
     )
+
     if not secrets.compare_digest(token, expected_token):
+        print("AUTH FAIL: token mismatch", flush=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or missing bearer token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    print("AUTH SUCCESS", flush=True)
 
     return x_client_id if x_client_id else ANONYMOUS_CLIENT
